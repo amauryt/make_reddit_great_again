@@ -1,0 +1,473 @@
+---
+title: "Make Reddit Great Again"
+author: "Amaury Trujillo"
+output: html_notebook
+---
+
+Please refer to the README in the notebook's repository for more information.
+
+**Before continuing you should have read the corresponding paper to understand the notebook.**
+
+
+```{r, setup, echo = FALSE, message=FALSE, warning=FALSE}
+source("./common_variables.R", local = knitr::knit_global())
+source("./db_utils.R", local = knitr::knit_global())
+source("./data_wrangling.R", local = knitr::knit_global())
+source("./plot_utils.R", local = knitr::knit_global())
+```
+
+```{r}
+# r/The_Donald
+td_submissions <- retrieve_db_table("the_donald", "submissions")
+td_comments <- retrieve_db_table("the_donald", "comments")
+
+# Core Users of r/The_Donald
+ctd_subreddits <- retrieve_db_table("core_the_donald", "subreddits")
+ctd_submissions <- retrieve_db_table("core_the_donald", "submissions")
+ctd_comments <- merge(
+  retrieve_db_table("core_the_donald", "comments"),
+  retrieve_db_table("core_the_donald", "perspective_scores"),
+  by.x = "id",
+  by.y = "comment_id",
+  all.x = TRUE
+)
+
+# Core Users W/I r/The_Donald
+ctd_itd_submissions <- ctd_submissions[subreddit_id == the_donald_id]
+ctd_itd_comments <- ctd_comments[subreddit_id == the_donald_id]
+
+# Core Users W/O r/The_Donald
+ctd_otd_submissions <- ctd_submissions[subreddit_id != the_donald_id]
+ctd_otd_comments <- ctd_comments[subreddit_id != the_donald_id]
+
+# Media Bias / Fact Check
+mbfc <- fread("./data/mbfc_scores.csv")
+```
+
+
+## Daily activity
+
+```{r}
+td_daily_activity <- daily_activity(td_submissions, td_comments)
+ctd_itd_daily_activity <- daily_activity(ctd_itd_submissions, ctd_itd_comments)
+ctd_otd_daily_activity <- daily_activity(ctd_otd_submissions, ctd_otd_comments)
+
+# Example
+head(td_daily_activity)
+```
+
+```{r}
+# Activity around quarantine 
+
+td_q_daily_activity <- td_daily_activity[created_date <= post_q_end_date]
+ctd_itd_q_daily_activity <- ctd_itd_daily_activity[created_date <= post_q_end_date]
+ctd_otd_q_daily_activity <- ctd_otd_daily_activity[created_date <= post_q_end_date]
+
+set_relative_week_and_day(td_q_daily_activity, quarantine_date)
+set_relative_week_and_day(ctd_itd_q_daily_activity, quarantine_date)
+set_relative_week_and_day(ctd_otd_q_daily_activity, quarantine_date)
+
+# Activity around restriction
+
+ctd_otd_r_daily_activity <- ctd_otd_daily_activity[created_date >= pre_r_start_date]
+set_relative_week_and_day(ctd_otd_r_daily_activity, restriction_date)
+
+# Example
+head(td_q_daily_activity)
+```
+
+
+```{r}
+# Interrupted Time Series
+
+activity_col_names <- c("s_count", "c_count", "s_dau", "c_dau")
+names(activity_col_names) <- activity_col_names
+activity_col_list <- as.list(activity_col_names)
+
+activity_its_lm <- function(dt) {
+  lapply(activity_col_list, function(y_name) intervention_its_lm(dt, y_name))
+}
+
+td_q_daily_activity_its_lm <- activity_its_lm(td_q_daily_activity)
+ctd_itd_q_daily_activity_its_lm <- activity_its_lm(ctd_itd_q_daily_activity)
+ctd_otd_q_daily_activity_its_lm <- activity_its_lm(ctd_otd_q_daily_activity)
+ctd_otd_r_daily_activity_its_lm <- activity_its_lm(ctd_otd_r_daily_activity)
+
+# Example
+td_q_daily_activity_its_lm$s_count
+```
+
+### Activity on r/The_Donald
+
+```{r}
+activity_its_plot(
+    dt = td_q_daily_activity,
+    col_suffix = "count",
+    s_color = submission_color,
+    c_color = comment_color,
+    its_lm = td_q_daily_activity_its_lm,
+    intervention = "quarantine",
+    y_lab = "# Posts",
+    scale_labels = c("submissions", "comments")
+)
+```
+
+```{r}
+# Effect on submissions
+td_q_bsts_s_count <- intervention_bsts_effect(td_q_daily_activity, "quarantine", "s_count")
+
+# Effect on comments
+td_q_bsts_c_count <- intervention_bsts_effect(td_q_daily_activity, "quarantine", "c_count")
+
+# Example
+td_q_bsts_c_count
+```
+
+
+```{r}
+activity_its_plot(
+    dt = td_q_daily_activity,
+    col_suffix = "dau",
+    s_color = submission_users_color,
+    c_color = comment_users_color,
+    its_lm = td_q_daily_activity_its_lm,
+    intervention = "quarantine",
+    y_lab = "# DAU",
+    scale_labels = c("submission DAU", "comments DAU")
+)
+```
+
+```{r}
+# Effect on submission DAU
+td_q_bsts_s_dau <- intervention_bsts_effect(td_q_daily_activity, "quarantine", "s_dau")
+
+# Effect on comment DAU
+td_q_bsts_c_dau <- intervention_bsts_effect(td_q_daily_activity, "quarantine", "c_dau")
+```
+
+### Activity of Core Users W/I r/The_Donald
+
+```{r}
+activity_its_plot(
+    dt = ctd_itd_q_daily_activity,
+    col_suffix = "count",
+    s_color = submission_color,
+    c_color = comment_color,
+    its_lm = ctd_itd_q_daily_activity_its_lm,
+    intervention = "quarantine",
+    y_lab = "# Posts",
+    scale_labels = c("submissions", "comments")
+)
+```
+
+```{r}
+# Effect on submissions
+ctd_itd_q_bsts_s_count <- intervention_bsts_effect(ctd_itd_q_daily_activity, "quarantine", "s_count")
+
+# Effect on comments
+ctd_itd_q_bsts_c_count <- intervention_bsts_effect(ctd_itd_q_daily_activity, "quarantine", "c_count")
+```
+
+```{r}
+activity_its_plot(
+    dt = ctd_itd_q_daily_activity,
+    col_suffix = "dau",
+    s_color = submission_users_color,
+    c_color = comment_users_color,
+    its_lm = ctd_itd_q_daily_activity_its_lm,
+    intervention = "quarantine",
+    y_lab = "# DAU",
+    scale_labels = c("submission DAU", "comments DAU")
+)
+```
+
+```{r}
+# Effect on submission DAU
+ctd_itd_q_bsts_s_dau <- intervention_bsts_effect(ctd_itd_q_daily_activity, "quarantine", "s_dau")
+
+# Effect on comment DAU
+ctd_itd_q_bsts_c_dau <- intervention_bsts_effect(ctd_itd_q_daily_activity, "quarantine", "c_dau")
+```
+
+#### Activity of Core Users W/O r/The_Donald
+
+```{r}
+activity_its_plot(
+    dt = ctd_otd_q_daily_activity,
+    col_suffix = "count",
+    s_color = submission_color,
+    c_color = comment_color,
+    its_lm = ctd_otd_q_daily_activity_its_lm,
+    intervention = "quarantine",
+    y_lab = "# Posts",
+    scale_labels = c("submissions", "comments")
+)
+```
+
+```{r}
+# Effect on submissions
+ctd_otd_q_bsts_s_count <- intervention_bsts_effect(ctd_otd_q_daily_activity, "quarantine", "s_count")
+
+# Effect on comments
+ctd_otd_q_bsts_c_count <- intervention_bsts_effect(ctd_otd_q_daily_activity, "quarantine", "c_count")
+```
+
+```{r}
+activity_its_plot(
+    dt = ctd_otd_q_daily_activity,
+    col_suffix = "dau",
+    s_color = submission_users_color,
+    c_color = comment_users_color,
+    its_lm = ctd_otd_q_daily_activity_its_lm,
+    intervention = "quarantine",
+    y_lab = "# DAU",
+    scale_labels = c("submission DAU", "comments DAU")
+)
+```
+
+```{r}
+# Effect on submission DAU
+ctd_otd_q_bsts_s_dau <- intervention_bsts_effect(ctd_otd_q_daily_activity, "quarantine", "s_dau")
+
+# Effect on comment DAU
+ctd_otd_q_bsts_c_dau <- intervention_bsts_effect(ctd_otd_q_daily_activity, "quarantine", "c_dau")
+```
+
+```{r}
+activity_its_plot(
+    dt = ctd_otd_r_daily_activity,
+    col_suffix = "count",
+    s_color = submission_color,
+    c_color = comment_color,
+    its_lm = ctd_otd_r_daily_activity_its_lm,
+    intervention = "restriction",
+    y_lab = "# Posts",
+    scale_labels = c("submissions", "comments")
+)
+```
+
+```{r}
+# Effect on submissions
+ctd_otd_r_bsts_s_count <- intervention_bsts_effect(ctd_otd_r_daily_activity, "restriction", "s_count")
+
+# Effect on comments
+ctd_otd_r_bsts_c_count <- intervention_bsts_effect(ctd_otd_r_daily_activity, "restriction", "c_count")
+```
+
+```{r}
+activity_its_plot(
+    dt = ctd_otd_r_daily_activity,
+    col_suffix = "dau",
+    s_color = submission_users_color,
+    c_color = comment_users_color,
+    its_lm = ctd_otd_r_daily_activity_its_lm,
+    intervention = "restriction",
+    y_lab = "# DAU",
+    scale_labels = c("submission DAU", "comments DAU")
+)
+```
+
+```{r}
+# Effect on submission DAU
+ctd_otd_r_bsts_s_dau <- intervention_bsts_effect(ctd_otd_r_daily_activity, "restriction", "s_dau")
+
+# Effect on comment DAU
+ctd_otd_r_bsts_c_dau <- intervention_bsts_effect(ctd_otd_r_daily_activity, "restriction", "c_dau")
+```
+
+### Daily severe toxicity
+
+```{r}
+ctd_itd_daily_sev_tox <-  daily_sev_tox(ctd_itd_comments)
+ctd_otd_daily_sev_tox <-  daily_sev_tox(ctd_otd_comments)
+
+ctd_itd_q_daily_sev_tox <- ctd_itd_daily_sev_tox[created_date <= post_q_end_date]
+ctd_otd_q_daily_sev_tox <- ctd_otd_daily_sev_tox[created_date <= post_q_end_date]
+ctd_otd_r_daily_sev_tox <- ctd_otd_daily_sev_tox[created_date >= pre_r_start_date]
+
+set_relative_week_and_day(ctd_itd_q_daily_sev_tox, quarantine_date)
+set_relative_week_and_day(ctd_otd_q_daily_sev_tox, quarantine_date)
+set_relative_week_and_day(ctd_otd_r_daily_sev_tox, restriction_date)
+```
+
+```{r, echo=FALSE}
+# Interrupted Time Series
+
+sev_tox_col_names <- c("median_sev_tox", "sev_tox_prop")
+names(sev_tox_col_names) <- sev_tox_col_names
+sev_tox_col_list <- as.list(sev_tox_col_names)
+
+sev_tox_its_lm <- function(dt) {
+  lapply(sev_tox_col_list, function(y_name) intervention_its_lm(dt, y_name))
+}
+
+ctd_itd_q_daily_sev_tox_its_lm <- sev_tox_its_lm(ctd_itd_q_daily_sev_tox)
+ctd_otd_q_daily_sev_tox_its_lm <- sev_tox_its_lm(ctd_otd_q_daily_sev_tox)
+ctd_otd_r_daily_sev_tox_its_lm <- sev_tox_its_lm(ctd_otd_r_daily_sev_tox)
+```
+
+#### Core Users W/I r/The_Donald
+
+```{r}
+sev_tox_its_plot(
+  dt = ctd_itd_q_daily_sev_tox,
+  col_name = "median_sev_tox",
+  sevtox_its_lm = ctd_itd_q_daily_sev_tox_its_lm,
+  intervention = "quarantine",
+  y_lab = "Median severe toxicity"
+)
+```
+
+
+
+```{r}
+sev_tox_its_plot(
+  dt = ctd_itd_q_daily_sev_tox,
+  col_name = "sev_tox_prop",
+  sevtox_its_lm = ctd_itd_q_daily_sev_tox_its_lm,
+  intervention = "quarantine",
+  y_lab = "Proportion with severe toxicity >= 0.5"
+)
+```
+
+```{r}
+ctd_itd_q_bsts_median_sev_tox <- intervention_bsts_effect(ctd_itd_q_daily_sev_tox, "quarantine", "median_sev_tox")
+ctd_itd_q_bsts_sev_tox_prop <- intervention_bsts_effect(ctd_itd_q_daily_sev_tox, "quarantine", "sev_tox_prop")
+```
+
+#### Core Users W/O r/The_Donald
+
+```{r}
+sev_tox_its_plot(
+  dt = ctd_otd_q_daily_sev_tox,
+  col_name = "median_sev_tox",
+  sevtox_its_lm = ctd_otd_q_daily_sev_tox_its_lm,
+  intervention = "quarantine",
+  y_lab = "Median severe toxicity"
+)
+```
+
+```{r}
+sev_tox_its_plot(
+  dt = ctd_otd_q_daily_sev_tox,
+  col_name = "sev_tox_prop",
+  sevtox_its_lm = ctd_otd_q_daily_sev_tox_its_lm,
+  intervention = "quarantine",
+  y_lab = "Proportion with severe toxicity >= 0.5"
+)
+```
+
+```{r}
+ctd_otd_q_bsts_median_sev_tox <- intervention_bsts_effect(ctd_otd_q_daily_sev_tox, "quarantine", "median_sev_tox")
+ctd_otd_q_bsts_sev_tox_prop <- intervention_bsts_effect(ctd_otd_q_daily_sev_tox, "quarantine", "sev_tox_prop")
+```
+
+The toxicity levels around the restriction seems to be greatly affected by the start of the George
+Floyd protests (vertical black dashed line in the following plots), an exogenous factor.
+For this reason, we also add a narrowed ITS regression of ±12 weeks (±84 days) that
+excludes the protests, for comparison.
+
+```{r}
+ctd_otd_nr_daily_sev_tox <- ctd_otd_r_daily_sev_tox[created_day %in% -84:84]
+ctd_otd_nr_daily_sev_tox_its_lm <- sev_tox_its_lm(ctd_otd_nr_daily_sev_tox)
+```
+
+
+```{r}
+add_george_floyd_layers_to_sev_tox_plot(
+  sev_tox_its_plot(
+    dt = ctd_otd_r_daily_sev_tox,
+    col_name = "median_sev_tox",
+    sevtox_its_lm = ctd_otd_r_daily_sev_tox_its_lm,
+    intervention = "quarantine",
+    y_lab = "Median severe toxicity"
+  ),
+  ctd_otd_nr_daily_sev_tox_its_lm,
+  "median_sev_tox"
+)
+```
+
+```{r}
+add_george_floyd_layers_to_sev_tox_plot(
+  sev_tox_its_plot(
+    dt = ctd_otd_r_daily_sev_tox,
+    col_name = "sev_tox_prop",
+    sevtox_its_lm = ctd_otd_r_daily_sev_tox_its_lm,
+    intervention = "quarantine",
+    y_lab = "Proportion with severe toxicity >= 0.5"
+  ),
+  ctd_otd_nr_daily_sev_tox_its_lm,
+  "sev_tox_prop"
+)
+```
+
+
+```{r}
+ctd_otd_r_bsts_median_sev_tox <- intervention_bsts_effect(
+  ctd_otd_r_daily_sev_tox, "restriction", "median_sev_tox"
+)
+ctd_otd_r_bsts_sev_tox_prop <- intervention_bsts_effect(
+  ctd_otd_r_daily_sev_tox, "restriction", "sev_tox_prop"
+)
+ctd_otd_nr_bsts_median_sev_tox <- intervention_bsts_effect(
+  ctd_otd_nr_daily_sev_tox, "narrowed_restriction", "median_sev_tox"
+)
+ctd_otd_nr_bsts_sev_tox_prop <- intervention_bsts_effect(
+  ctd_otd_nr_daily_sev_tox, "narrowed_restriction", "sev_tox_prop"
+)
+```
+
+
+
+## Quality of Shared Information
+
+```{r}
+td_s_mbfc <- sumission_mbfc_by_period(td_submissions, mbfc, "quarantine")
+ctd_itd_s_mbfc <- sumission_mbfc_by_period(ctd_itd_submissions, mbfc, "quarantine")
+ctd_otd_s_mbfc <- sumission_mbfc_by_period(ctd_otd_submissions, mbfc, "all")
+```
+
+### On r/The_Donald
+
+```{r}
+submission_mbfc_aggregation(td_s_mbfc, "general_bias")
+```
+```{r}
+submission_mbfc_aggregation(td_s_mbfc, "political_bias")
+```
+```{r}
+submission_mbfc_aggregation(td_s_mbfc, "accuracy")
+```
+### Core Users W/I r/The_Donald
+
+```{r}
+submission_mbfc_aggregation(ctd_itd_s_mbfc, "general_bias")
+```
+
+```{r}
+submission_mbfc_aggregation(ctd_itd_s_mbfc, "political_bias")
+```
+```{r}
+submission_mbfc_aggregation(ctd_itd_s_mbfc, "accuracy")
+```
+
+### Core Users W/O r/The_Donald
+
+```{r}
+submission_mbfc_aggregation(ctd_otd_s_mbfc, "political_bias")
+```
+
+```{r}
+submission_mbfc_aggregation(ctd_otd_s_mbfc, "general_bias")
+```
+
+```{r}
+submission_mbfc_aggregation(ctd_otd_s_mbfc, "accuracy")
+```
+
+## R Session
+
+```{r}
+sessionInfo()
+```
+

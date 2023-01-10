@@ -7,17 +7,25 @@ that shows how to derive the main results of the article
 - [**Dataset files**](https://doi.org/10.5281/zenodo.6250577)
 - [**Rendered notebook**](https://amauryt.github.io/make_reddit_great_again/)
 
-The article is available as a [preprint on arXiv](https://arxiv.org/abs/2201.06455).
+The article is available both on the ACM Digital Library as an [open access article](https://doi.org/10.1145/3555639) and on arXiv as a [preprint](https://arxiv.org/abs/2201.06455).
 If you use the approach and or functions on this repository on your own research, please cite:
 
 ```
-@misc{trujillo2022make,
-      title={Make Reddit Great Again: Assessing Community Effects of Moderation Interventions on r/The_Donald}, 
-      author={Amaury Trujillo and Stefano Cresci},
-      year={2022},
-      eprint={2201.06455},
-      archivePrefix={arXiv},
-      primaryClass={cs.SI}
+@article{trujillo2022make,
+  author = {Trujillo, Amaury and Cresci, Stefano},
+  title = {Make Reddit Great Again: Assessing Community Effects of Moderation Interventions on r/The_Donald},
+  year = {2022},
+  issue_date = {November 2022},
+  publisher = {Association for Computing Machinery},
+  address = {New York, NY, USA},
+  volume = {6},
+  number = {CSCW2},
+  url = {https://doi.org/10.1145/3555639},
+  doi = {10.1145/3555639},
+  journal = {Proc. ACM Hum.-Comput. Interact.},
+  month = {nov},
+  articleno = {526},
+  numpages = {28}
 }
 ```
 

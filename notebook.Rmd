@@ -393,7 +393,7 @@ add_george_floyd_layers_to_sev_tox_plot(
     dt = ctd_otd_r_daily_sev_tox,
     col_name = "sev_tox_prop",
     sevtox_its_lm = ctd_otd_r_daily_sev_tox_its_lm,
-    intervention = "quarantine",
+    intervention = "intervention",
     y_lab = "Proportion with severe toxicity >= 0.5"
   ),
   ctd_otd_nr_daily_sev_tox_its_lm,
